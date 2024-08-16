@@ -35,11 +35,10 @@ TEST_F(protobuf_tests, simple_usage) {
 }
 
 TEST_F(protobuf_tests, simple_serialize) {
-  auto f { person.SerializeAsString() };
-  study::Person person2;
-  person2.MergeFromString(f);
+  study::Person new_person;
+  new_person.ParseFromString(person.SerializeAsString());
 
-  ASSERT_EQ(expected_name, person2.name());
-  ASSERT_EQ(expected_id, person2.id());
-  ASSERT_EQ(expected_email, person2.email());
+  ASSERT_EQ(expected_name, new_person.name());
+  ASSERT_EQ(expected_id, new_person.id());
+  ASSERT_EQ(expected_email, new_person.email());
 }

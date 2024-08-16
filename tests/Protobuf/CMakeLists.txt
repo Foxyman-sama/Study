@@ -18,7 +18,7 @@ target_link_libraries(${PROJECT_NAME}
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 # BUILD ONLY WITH CMAKE!!!
-protobuf_generate(TARGET ${PROJECT_NAME} PROTOS ${CMAKE_CURRENT_SOURCE_DIR}/proto/hello.proto)
+protobuf_generate(TARGET ${PROJECT_NAME} PROTOS ${CMAKE_CURRENT_SOURCE_DIR}/proto/person.proto)
 
 add_test(${PROJECT_NAME} ${PROJECT_NAME})
 
