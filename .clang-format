@@ -5,5 +5,3 @@ ColumnLimit: 120
 Cpp11BracedListStyle: false
 SpaceBeforeCpp11BracedList: true
 DerivePointerAlignment: false
-PointerAlignment: Right
-ReferenceAlignment: Right 

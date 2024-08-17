@@ -4,6 +4,7 @@
 #include <iostream>
 #include <list>
 #include <memory>
+#include <print>
 #include <set>
 #include <utility>
 
@@ -19,7 +20,7 @@ class chat_participant {
  public:
   virtual ~chat_participant() {}
 
-  virtual void deliver(const chat_message &msg) = 0;
+  virtual void deliver(const chat_message& msg) = 0;
 };
 
 using chat_participant_ptr = std::shared_ptr<chat_participant>;
@@ -27,7 +28,9 @@ using chat_participant_ptr = std::shared_ptr<chat_participant>;
 class chat_room {
  public:
   void join(chat_participant_ptr participant) {
+    // Add to the connection list
     participants.insert(participant);
+    // Send messages to a new user
     for (auto msg : recent_msgs) {
       participant->deliver(msg);
     }
@@ -35,7 +38,7 @@ class chat_room {
 
   void leave(chat_participant_ptr participant) { participants.erase(participant); }
 
-  void deliver(const chat_message &msg) {
+  void deliver(const chat_message& msg) {
     recent_msgs.push_back(msg);
 
     while (recent_msgs.size() > max_recent_msgs) {
@@ -56,14 +59,17 @@ class chat_room {
 
 class chat_session : public chat_participant, public std::enable_shared_from_this<chat_session> {
  public:
-  chat_session(tcp::socket socket, chat_room &room) : socket { std::move(socket) }, room { room } {}
+  chat_session(tcp::socket socket, chat_room& room) : socket { std::move(socket) }, room { room } {}
 
-  void start() { room.join(shared_from_this()); }
+  void start() {
+    room.join(shared_from_this());
+    do_read_header();
+  }
 
-  void deliver(const chat_message &msg) {
-    auto wirte_in_progress { !write_msgs.empty() };
+  void deliver(const chat_message& msg) {
+    auto write_in_progress { !write_msgs.empty() };
     write_msgs.push_back(msg);
-    if (!wirte_in_progress) {
+    if (!write_in_progress) {
       do_write();
     }
   }
@@ -111,14 +117,14 @@ class chat_session : public chat_participant, public std::enable_shared_from_thi
   }
 
   tcp::socket socket;
-  chat_room &room;
+  chat_room& room;
   chat_message read_msg;
   chat_message_queue write_msgs;
 };
 
 class chat_server {
  public:
-  chat_server(boost::asio::io_context &io, const tcp::endpoint &endpoint) : acceptor(io, endpoint) {}
+  chat_server(boost::asio::io_context& io, const tcp::endpoint& endpoint) : acceptor(io, endpoint) { do_accept(); }
 
  private:
   void do_accept() {
