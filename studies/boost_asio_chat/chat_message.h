@@ -10,15 +10,15 @@ constexpr auto max_body_length { std::size_t { 512 } };
 
 class chat_message {
  public:
-  const char *const get_data() const { return data; }
+  const char* const get_data() const { return data; }
 
-  char *get_data() { return data; }
+  char* get_data() { return data; }
 
   std::size_t get_length() const { return header_length + body_length; }
 
-  const char *const get_body() const { return data + header_length; }
+  const char* const get_body() const { return data + header_length; }
 
-  char *get_body() { return data + body_length; }
+  char* get_body() { return data + header_length; }
 
   std::size_t get_body_length() const { return body_length; }
 

@@ -124,7 +124,10 @@ class chat_session : public chat_participant, public std::enable_shared_from_thi
 
 class chat_server {
  public:
-  chat_server(boost::asio::io_context& io, const tcp::endpoint& endpoint) : acceptor(io, endpoint) { do_accept(); }
+  chat_server(boost::asio::io_context& io, const tcp::endpoint& endpoint) : acceptor(io, endpoint) {
+    acceptor.set_option(tcp::acceptor::reuse_address(true));
+    do_accept();
+  }
 
  private:
   void do_accept() {

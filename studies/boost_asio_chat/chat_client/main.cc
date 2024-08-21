@@ -1,104 +1,130 @@
+#include <unistd.h>
+
+#include <array>
 #include <boost/asio.hpp>
 #include <cstdlib>
-#include <deque>
+#include <cstring>
 #include <iostream>
-#include <print>
-#include <thread>
 
 #include "../chat_message.h"
 #include "boost/asio/connect.hpp"
+#include "boost/asio/error.hpp"
 #include "boost/asio/io_context.hpp"
+#include "boost/asio/posix/stream_descriptor.hpp"
+#include "boost/asio/read_until.hpp"
+#include "boost/asio/streambuf.hpp"
+#include "boost/asio/write.hpp"
 #include "boost/system/detail/error_code.hpp"
 
 using boost::asio::ip::tcp;
+namespace posix = boost::asio::posix;
 
-using chat_message_queue = std::deque<chat_message>;
-
-class chat_client {
+class posix_chat_client {
  public:
-  chat_client(boost::asio::io_context& io, const tcp::resolver::results_type& endpoints) : io { io }, socket { io } {
+  posix_chat_client(boost::asio::io_context& io, const tcp::resolver::results_type& endpoints)
+      : socket { io },
+        input { io, dup(STDIN_FILENO) },
+        output { io, dup(STDOUT_FILENO) },
+        input_buf { max_body_length } {
     do_connect(endpoints);
-  }
-
-  void write(const chat_message& msg) {
-    boost::asio::post(io, [this, msg]() {
-      auto write_in_progress { !write_msgs.empty() };
-      write_msgs.push_back(msg);
-      if (!write_in_progress) {
-        do_write();
-      }
-    });
-  }
-
-  void close() {
-    boost::asio::post(io, [this]() { socket.close(); });
   }
 
  private:
   void do_connect(const tcp::resolver::results_type& endpoints) {
     boost::asio::async_connect(socket, endpoints, [this](boost::system::error_code ec, tcp::endpoint) {
-      if (!ec && read_msg.decode_header()) {
-        do_read_body();
-      } else {
-        socket.close();
+      if (!ec) {
+        do_read_header();
+        do_read_input();
       }
     });
+  }
+
+  void do_read_header() {
+    boost::asio::async_read(socket, boost::asio::buffer(read_msg.get_data(), header_length),
+                            [this](boost::system::error_code ec, std::size_t) {
+                              if (!ec && read_msg.decode_header()) {
+                                do_read_body();
+                              } else {
+                                close();
+                              }
+                            });
   }
 
   void do_read_body() {
     boost::asio::async_read(socket, boost::asio::buffer(read_msg.get_body(), read_msg.get_body_length()),
                             [this](boost::system::error_code ec, std::size_t) {
                               if (!ec) {
-                                std::cout.write(read_msg.get_body(), read_msg.get_body_length());
-                                std::cout << "\n";
-                                do_read_body();
+                                do_write_output();
                               } else {
-                                socket.close();
+                                close();
                               }
                             });
   }
 
-  void do_write() {
-    boost::asio::async_write(socket,
-                             boost::asio::buffer(write_msgs.front().get_data(), write_msgs.front().get_length()),
+  void do_write_output() {
+    static char eol[] { '\n' };
+    std::array<boost::asio::const_buffer, 2> buffers {
+      { boost::asio::buffer(read_msg.get_body(), read_msg.get_body_length()), boost::asio::buffer(eol) }
+    };
+    boost::asio::async_write(output, buffers, [this](boost::system::error_code ec, std::size_t) {
+      if (!ec) {
+        do_read_header();
+      } else {
+        close();
+      }
+    });
+  }
+
+  void do_read_input() {
+    boost::asio::async_read_until(input, input_buf, '\n', [this](boost::system::error_code ec, std::size_t length) {
+      if (!ec) {
+        write_msg.set_body_length(length - 1);
+        input_buf.sgetn(write_msg.get_body(), length - 1);
+        input_buf.consume(1);
+        write_msg.encode_header();
+        do_write_message();
+      } else if (ec == boost::asio::error::not_found) {
+        write_msg.set_body_length(input_buf.size());
+        input_buf.sgetn(write_msg.get_body(), input_buf.size());
+        write_msg.encode_header();
+        do_write_message();
+      } else {
+        close();
+      }
+    });
+  }
+
+  void do_write_message() {
+    boost::asio::async_write(socket, boost::asio::buffer(write_msg.get_data(), write_msg.get_length()),
                              [this](boost::system::error_code ec, std::size_t) {
                                if (!ec) {
-                                 write_msgs.pop_front();
-                                 if (!write_msgs.empty()) {
-                                   do_write();
-                                 } else {
-                                   socket.close();
-                                 }
+                                 do_read_input();
+                               } else {
+                                 close();
                                }
                              });
   }
 
-  boost::asio::io_context& io;
+  void close() {
+    socket.close();
+    input.close();
+    output.close();
+  }
+
   tcp::socket socket;
+  posix::stream_descriptor input;
+  posix::stream_descriptor output;
   chat_message read_msg;
-  chat_message_queue write_msgs;
+  chat_message write_msg;
+  boost::asio::streambuf input_buf;
 };
 
 int main() {
   boost::asio::io_context io;
-
   tcp::resolver resolver { io };
-  const auto endpoints { resolver.resolve("127.0.0.1", "9090") };
-  chat_client client { io, endpoints };
+  auto endpoints { resolver.resolve("127.0.0.1", "9090") };
 
-  std::thread t { [&io]() { io.run(); } };
+  posix_chat_client client { io, endpoints };
 
-  char line[max_body_length + 1];
-  while (std::cin.getline(line, max_body_length + 1)) {
-    std::print("Your message: {0}", line);
-
-    chat_message msg;
-    msg.set_body_length(std::strlen(line));
-    std::memcpy(msg.get_body(), line, msg.get_body_length());
-    msg.encode_header();
-    client.write(msg);
-  }
-
-  client.close();
-  t.join();
+  io.run();
 }
