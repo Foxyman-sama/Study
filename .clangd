@@ -1,2 +1,2 @@
 CompileFlags:
-  Remove: [-fmodules-ts, -fmodule-mapper=*, -fdeps-format=p1689r5]
+  Remove: [-fmodules-ts, -fmodule-mapper=*, -fdeps-format=*]
