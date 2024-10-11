@@ -13,4 +13,13 @@ Rectangle {
     TapHandler {
         onTapped: parent.color = "blue"
     }
+
+    focus: true
+
+    Keys.onPressed: {
+        if (event.key == Qt.Key_Return) {
+            color = "white";
+            event.accepted = true;
+        }
+    }
 }
