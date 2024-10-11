@@ -2,6 +2,3 @@
 \build
 \.cache
 CMakeLists.txt.user
-.gdbinit
-
-
